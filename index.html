@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="我的日历">
+<meta name="theme-color" content="#F2F2F7">
+<title>我的日历</title>
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+
+:root {
+  --bg: #F2F2F7;
+  --card: #FFFFFF;
+  --text: #000000;
+  --text-2: #8E8E93;
+  --text-3: #C7C7CC;
+  --separator: rgba(60,60,67,0.13);
+  --separator-opaque: #E5E5EA;
+  --fill: rgba(118,118,128,0.12);
+  --blue: #007AFF;
+  --green: #34C759;
+  --orange: #FF9500;
+  --teal: #30B0C7;
+  --red: #FF3B30;
+  --accent: #007AFF;
+  --accent-tint: rgba(0,122,255,0.15);
+}
+[data-tab="study"]   { --accent: #34C759; --accent-tint: rgba(52,199,89,0.15); }
+[data-tab="fitness"][data-phase="bulk"] { --accent: #FF9500; --accent-tint: rgba(255,149,0,0.15); }
+[data-tab="fitness"][data-phase="cut"]  { --accent: #30B0C7; --accent-tint: rgba(48,176,199,0.15); }
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior-y: contain;
+  -webkit-font-smoothing: antialiased;
+  font-size: 17px;
+}
+body { padding-bottom: calc(50px + env(safe-area-inset-bottom)); }
+
+/* ========== 主页头部 ========== */
+.page-header {
+  padding: 8px 20px 6px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+}
+.page-header h1 {
+  font-size: 32px; font-weight: 700;
+  letter-spacing: -0.6px; line-height: 1.15;
+  flex-shrink: 0;
+}
+.header-btn {
+  border: none; background: transparent;
+  color: var(--accent); font-size: 17px; font-family: inherit;
+  padding: 6px 4px; cursor: pointer;
+  font-weight: 400;
+}
+
+/* 分段控件 */
+.segmented {
+  display: inline-flex;
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.segmented button {
+  padding: 6px 14px;
+  border: none; background: transparent;
+  font-size: 13px; font-weight: 500;
+  color: var(--text);
+  border-radius: 7px;
+  font-family: inherit; cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.segmented button.active {
+  background: #FFFFFF;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10), 0 1px 1px rgba(0,0,0,0.04);
+  font-weight: 600;
+}
+
+/* ========== 日历卡 ========== */
+.calendar-card {
+  background: var(--card);
+  border-radius: 10px;
+  margin: 12px;
+  padding: 14px 10px 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.month-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; padding: 0 10px;
+}
+.month-nav button {
+  border: none; background: transparent;
+  color: var(--accent); font-size: 22px;
+  padding: 2px 14px; cursor: pointer; font-family: inherit;
+  line-height: 1; font-weight: 300;
+}
+.month-nav .title { font-size: 17px; font-weight: 600; }
+.weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  text-align: center; font-size: 11px; color: var(--text-2);
+  margin-bottom: 4px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.day {
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; font-size: 17px;
+  cursor: pointer; border-radius: 50%;
+  user-select: none; color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.day.other-month { color: var(--text-3); }
+.day.today:not(.selected) { color: var(--accent); font-weight: 600; }
+.day.selected { background: var(--accent); color: #FFFFFF; font-weight: 600; }
+.day .dot {
+  position: absolute; bottom: 5px;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent);
+}
+.day.selected .dot { background: #FFFFFF; }
+.day.other-month .dot { opacity: 0.4; }
+
+/* ========== 全屏页面 ========== */
+.page-fullscreen {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  z-index: 150;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+.page-fullscreen.open { display: flex; }
+.page-fullscreen.from-bottom.open { animation: slideInUp 0.28s cubic-bezier(0.22,1,0.36,1); }
+.page-fullscreen.from-right.open  { animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1); }
+@keyframes slideInUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+@keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+
+/* 导航栏 */
+.nav-bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center;
+  padding: 10px 12px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  background: rgba(242,242,247,0.88);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid var(--separator);
+  min-height: 44px;
+}
+.nav-bar .nav-back {
+  border: none; background: transparent;
+  color: var(--accent); font-size: 17px;
+  font-family: inherit; cursor: pointer;
+  padding: 6px 4px 6px 0;
+  display: flex; align-items: center; gap: 2px;
+  font-weight: 400;
+}
+.nav-bar .nav-title {
+  flex: 1; text-align: center;
+  font-size: 17px; font-weight: 600;
+  padding: 0 8px;
+}
+.nav-bar .nav-right {
+  min-width: 44px; display: flex; justify-content: flex-end;
+}
+.nav-bar .nav-right button {
+  border: none; background: transparent;
+  color: var(--accent); font-size: 26px;
+  font-family: inherit; cursor: pointer;
+  padding: 0 4px; line-height: 1; font-weight: 300;
+}
+.nav-bar .nav-right button.text-btn {
+  font-size: 17px; font-weight: 400;
+}
+
+/* ========== iOS 卡片列表 ========== */
+.inset-card {
+  background: var(--card);
+  border-radius: 10px;
+  margin: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.inset-card.tight { margin-top: 0; }
+.section-header {
+  padding: 18px 16px 6px;
+  font-size: 13px; color: var(--text-2);
+  letter-spacing: 0.4px; text-transform: uppercase;
+  font-weight: 500;
+  display: flex; align-items: center; justify-content: space-between;
+  background: transparent;
+}
+.section-header .add {
+  border: none; background: transparent;
+  color: var(--accent); font-size: 22px;
+  font-family: inherit; cursor: pointer;
+  padding: 0 6px; line-height: 1; font-weight: 300;
+}
+
+/* 行 */
+.row {
+  padding: 11px 16px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer;
+  border-bottom: 0.5px solid var(--separator);
+  background: var(--card);
+  min-height: 44px;
+}
+.row:last-child { border-bottom: none; }
+.row:active { background: rgba(0,0,0,0.04); }
+.row .row-main { flex: 1; min-width: 0; }
+.row .row-title { font-size: 17px; color: var(--text); }
+.row .row-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.row .row-time {
+  font-size: 15px; color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.row .chevron {
+  color: var(--text-3); font-size: 13px;
+  flex-shrink: 0;
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-2); font-size: 15px;
+}
+
+/* ========== 健身计划 ========== */
+.plan-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 8px; padding: 16px;
+}
+.plan-btn {
+  border: 1.5px solid var(--separator-opaque);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 12px 2px;
+  font-size: 12px; font-family: inherit;
+  color: var(--text); cursor: pointer;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  transition: all 0.15s;
+}
+.plan-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 600;
+}
+.plan-btn .emoji { font-size: 20px; line-height: 1; }
+
+/* 完成勾 */
+.check-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px;
+  border-top: 0.5px solid var(--separator);
+  cursor: pointer;
+  min-height: 48px;
+}
+.check-row:active { background: rgba(0,0,0,0.04); }
+.check-row .checkbox {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--text-3);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: #FFFFFF; font-size: 13px;
+  transition: all 0.15s;
+  font-weight: 700;
+}
+.check-row.checked .checkbox {
+  background: var(--accent); border-color: var(--accent);
+}
+.check-row.checked .checkbox::after { content: '✓'; }
+.check-row .check-label { font-size: 17px; }
+.check-row.checked .check-label { color: var(--text-2); }
+
+/* 饮食 */
+.meal-row {
+  padding: 11px 16px;
+  border-bottom: 0.5px solid var(--separator);
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer;
+  min-height: 48px;
+}
+.meal-row:last-child { border-bottom: none; }
+.meal-row:active { background: rgba(0,0,0,0.04); }
+.meal-name { flex: 1; font-size: 16px; }
+.meal-macros {
+  font-size: 11px; color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right; line-height: 1.4;
+}
+.totals-card {
+  background: var(--card);
+  border-radius: 10px;
+  margin: 8px 16px 0;
+  padding: 16px 8px;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  text-align: center; gap: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.totals-card .val {
+  font-size: 20px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.totals-card .lbl {
+  font-size: 11px; color: var(--text-2);
+  margin-top: 3px;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+
+/* ========== 出勤状态标记 ========== */
+.attend-mark {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.attend-mark.none {
+  border: 1.5px dashed var(--text-3);
+  color: var(--text-3);
+  background: transparent;
+}
+.attend-mark.present { background: var(--green); color: #FFFFFF; }
+.attend-mark.absent  { background: var(--red);   color: #FFFFFF; }
+.attend-mark.signed  { background: var(--blue);  color: #FFFFFF; }
+
+/* ========== 底部 Tab ========== */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--separator);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 100;
+  height: calc(50px + env(safe-area-inset-bottom));
+  align-items: flex-start;
+}
+.tabbar button {
+  flex: 1; border: none; background: transparent;
+  padding: 8px 0 6px;
+  font-size: 10px; color: var(--text-2);
+  display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+  font-family: inherit; cursor: pointer;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+.tabbar button.active { color: var(--accent); }
+.tabbar .icon { font-size: 22px; line-height: 1; }
+.tabbar .icon-line {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ========== Modal ========== */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: flex-end;
+  z-index: 200;
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+.modal {
+  background: var(--bg);
+  width: 100%; max-height: 92vh;
+  border-radius: 14px 14px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  animation: slideInUp 0.28s cubic-bezier(0.22,1,0.36,1);
+  overflow-y: auto;
+}
+.modal h2 {
+  font-size: 17px; font-weight: 600;
+  margin-bottom: 18px; text-align: center;
+}
+.form-group {
+  background: var(--card);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.form-row {
+  display: flex; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--separator);
+  min-height: 44px;
+  gap: 12px;
+}
+.form-row:last-child { border-bottom: none; }
+.form-row label {
+  font-size: 16px; color: var(--text);
+  flex-shrink: 0; min-width: 70px;
+}
+.form-row input, .form-row textarea {
+  flex: 1; border: none; background: transparent;
+  font-size: 16px; font-family: inherit; color: var(--text);
+  outline: none; padding: 4px 0;
+  min-width: 0;
+}
+.form-row input::placeholder, .form-row textarea::placeholder {
+  color: var(--text-3);
+}
+.form-row textarea { resize: none; min-height: 48px; }
+.form-row.row-3 {
+  gap: 8px;
+}
+.form-row.row-3 .mini {
+  flex: 1; display: flex; flex-direction: column; gap: 3px;
+}
+.form-row.row-3 .mini label {
+  font-size: 11px; color: var(--text-2); min-width: 0;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.form-row.row-3 .mini input {
+  border: 1px solid var(--separator-opaque);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 16px; background: var(--bg);
+  text-align: center;
+}
+.modal-actions {
+  display: flex; gap: 10px; margin-top: 8px;
+}
+.modal-actions button {
+  flex: 1; padding: 14px; border-radius: 12px;
+  border: none; font-size: 17px; font-family: inherit;
+  font-weight: 600; cursor: pointer;
+}
+.btn-cancel { background: var(--card); color: var(--accent); }
+.btn-save { background: var(--accent); color: #FFFFFF; }
+.btn-danger { background: var(--card); color: var(--red); }
+.full-btn {
+  width: 100%; padding: 14px; border-radius: 12px;
+  border: none; font-family: inherit; font-size: 17px;
+  font-weight: 600; cursor: pointer;
+  background: var(--card); color: var(--red);
+  margin-top: 8px;
+}
+
+/* ========== Action Sheet ========== */
+.sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 250;
+  display: flex; align-items: flex-end;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  animation: fadeIn 0.2s ease;
+}
+.sheet-panel {
+  width: 100%;
+  animation: slideInUp 0.28s cubic-bezier(0.22,1,0.36,1);
+}
+.sheet-group {
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.sheet-title {
+  padding: 14px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-2);
+  border-bottom: 0.5px solid var(--separator);
+}
+.sheet-btn {
+  display: block; width: 100%;
+  padding: 17px 16px;
+  border: none; background: transparent;
+  font-size: 20px; font-family: inherit;
+  color: var(--blue);
+  cursor: pointer;
+  border-bottom: 0.5px solid var(--separator);
+  text-align: center;
+  font-weight: 400;
+}
+.sheet-btn:last-child { border-bottom: none; }
+.sheet-btn:active { background: rgba(0,0,0,0.06); }
+.sheet-btn.destructive { color: var(--red); }
+.sheet-btn.bold { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div id="app" data-tab="daily" data-phase="bulk">
+  <div class="page-header">
+    <h1 id="pageTitle">日常</h1>
+    <div id="headerRight"></div>
+  </div>
+  <div class="calendar-card">
+    <div class="month-nav">
+      <button data-click="prevMonth">‹</button>
+      <span class="title" id="monthTitle"></span>
+      <button data-click="nextMonth">›</button>
+    </div>
+    <div class="weekdays" id="weekdays"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<div id="detailPage" class="page-fullscreen from-bottom"></div>
+<div id="schedulePage" class="page-fullscreen from-right"></div>
+<nav class="tabbar" id="tabbar"></nav>
+<div class="modal-backdrop" id="modal" style="display:none;"></div>
+<div class="sheet-backdrop" id="sheet" style="display:none;"></div>
+
+<script>
+/* ========== 常量 ========== */
+const STORAGE_KEY = 'mycalendar_v1';
+const PLAN_TEMPLATE = ['chest','back','shoulder','rest','chest','back','legs','rest'];
+const PLAN_LABELS = { chest:'胸', back:'背', shoulder:'肩', legs:'腿', rest:'休息' };
+const PLAN_EMOJI  = { chest:'💪', back:'🔙', shoulder:'🏋️', legs:'🦵', rest:'😴' };
+const PLAN_ORDER = ['chest','back','shoulder','legs','rest'];
+const WEEK_LABELS = ['周一','周二','周三','周四','周五','周六','周日'];
+const ATTEND_LABELS = { present:'出席', absent:'缺席', signed:'签到' };
+const ATTEND_MARK = { present:'✓', absent:'✗', signed:'⊙' };
+
+/* ========== 状态 ========== */
+let state = {
+  version: 2,
+  phase: 'bulk',
+  daily: [],
+  study: [],
+  fitness: {},
+  schedule: { 1:[],2:[],3:[],4:[],5:[],6:[],7:[] },
+  attendance: {}
+};
+let view = {
+  tab: 'daily',
+  month: new Date(),
+  selectedDay: new Date(),
+  detailOpen: false,
+  scheduleOpen: false
+};
+
+/* ========== 工具 ========== */
+function uuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+function toKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+function fromKey(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function addDays(date, n) {
+  const d = new Date(date); d.setDate(d.getDate() + n); return d;
+}
+function mondayIndex(date) { return (date.getDay() + 6) % 7; }
+function weekIndex(date) {
+  const d = date.getDay();
+  return d === 0 ? 7 : d;
+}
+function monthTitle(date) { return date.getFullYear() + ' 年 ' + (date.getMonth() + 1) + ' 月'; }
+function dayTitle(date) {
+  const w = ['周日','周一','周二','周三','周四','周五','周六'][date.getDay()];
+  return (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + w;
+}
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ========== 持久化 ========== */
+function migrate(data) {
+  if (!data.schedule) data.schedule = { 1:[],2:[],3:[],4:[],5:[],6:[],7:[] };
+  else for (let i = 1; i <= 7; i++) if (!data.schedule[i]) data.schedule[i] = [];
+  if (!data.attendance) data.attendance = {};
+  if (!data.fitness) data.fitness = {};
+  if (!data.daily) data.daily = [];
+  if (!data.study) data.study = [];
+  data.version = 2;
+  return data;
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    state = Object.assign(state, migrate(parsed));
+  } catch (e) { console.error('加载失败', e); }
+}
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error('保存失败', e);
+    alert('保存失败：' + e.message);
+  }
+}
+
+/* ========== 事项操作 ========== */
+function getEvents(tab, date) {
+  const key = toKey(date);
+  return (state[tab] || [])
+    .filter(e => e.date === key)
+    .sort((a,b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+}
+function addEvent(tab, event) {
+  if (!state[tab]) state[tab] = [];
+  event.id = uuid();
+  state[tab].push(event);
+  save();
+}
+function updateEvent(tab, id, patch) {
+  const list = state[tab] || [];
+  const i = list.findIndex(e => e.id === id);
+  if (i >= 0) { list[i] = Object.assign({}, list[i], patch); save(); }
+}
+function deleteEvent(tab, id) {
+  state[tab] = (state[tab] || []).filter(e => e.id !== id);
+  save();
+}
+
+/* ========== 健身操作 ========== */
+function emptyFitDay() { return { plan:'', manual:false, done:false, fasting:false, meals:[] }; }
+function getFitDay(date) {
+  const key = toKey(date);
+  if (!state.fitness[key]) state.fitness[key] = emptyFitDay();
+  return state.fitness[key];
+}
+function setFitnessPlan(date, plan) {
+  const key = toKey(date);
+  if (!state.fitness[key]) state.fitness[key] = emptyFitDay();
+  state.fitness[key].plan = plan;
+  state.fitness[key].manual = true;
+  rebuildSchedule();
+  save();
+}
+function setFitnessDone(date, done) { getFitDay(date).done = done; save(); }
+function setFitnessFasting(date, v) { getFitDay(date).fasting = v; save(); }
+function addMeal(date, meal) {
+  const day = getFitDay(date);
+  meal.id = uuid();
+  day.meals.push(meal);
+  save();
+}
+function updateMeal(date, id, patch) {
+  const day = getFitDay(date);
+  const i = day.meals.findIndex(m => m.id === id);
+  if (i >= 0) { day.meals[i] = Object.assign({}, day.meals[i], patch); save(); }
+}
+function deleteMeal(date, id) {
+  const day = getFitDay(date);
+  day.meals = day.meals.filter(m => m.id !== id);
+  save();
+}
+function hasFitness(date) {
+  const f = state.fitness[toKey(date)];
+  if (!f) return false;
+  return !!f.plan || (f.meals && f.meals.length > 0);
+}
+
+/* ========== 自动排程 ========== */
+function rebuildSchedule() {
+  const manualKeys = Object.keys(state.fitness)
+    .filter(k => state.fitness[k].manual && state.fitness[k].plan)
+    .sort();
+  if (manualKeys.length === 0) return;
+
+  const horizon = addDays(startOfDay(new Date()), 400);
+
+  for (let i = 0; i < manualKeys.length; i++) {
+    const startKey = manualKeys[i];
+    const startDate = fromKey(startKey);
+    let idx = PLAN_TEMPLATE.indexOf(state.fitness[startKey].plan);
+    if (idx === -1) continue;
+    const endKey = manualKeys[i + 1];
+
+    let d = startDate;
+    for (let step = 0; step < 500; step++) {
+      d = addDays(d, 1);
+      if (d > horizon) break;
+      const k = toKey(d);
+      if (endKey && k === endKey) break;
+      if (state.fitness[k] && state.fitness[k].manual) continue;
+      idx = (idx + 1) % PLAN_TEMPLATE.length;
+      if (!state.fitness[k]) state.fitness[k] = emptyFitDay();
+      state.fitness[k].plan = PLAN_TEMPLATE[idx];
+    }
+  }
+}
+
+/* ========== 课表操作 ========== */
+function coursesForDay(date) {
+  const w = weekIndex(date);
+  const list = state.schedule[w] || [];
+  return list.slice().sort((a,b) => a.start.localeCompare(b.start));
+}
+function hasScheduleOn(date) { return coursesForDay(date).length > 0; }
+
+function addCourse(weekday, course) {
+  if (!state.schedule[weekday]) state.schedule[weekday] = [];
+  course.id = uuid();
+  state.schedule[weekday].push(course);
+  save();
+}
+function updateCourse(weekday, id, patch) {
+  const list = state.schedule[weekday] || [];
+  const i = list.findIndex(c => c.id === id);
+  if (i >= 0) { list[i] = Object.assign({}, list[i], patch); save(); }
+}
+function deleteCourse(weekday, id) {
+  state.schedule[weekday] = (state.schedule[weekday] || []).filter(c => c.id !== id);
+  save();
+}
+
+/* ========== 出勤操作 ========== */
+function getAttendance(date) {
+  const key = toKey(date);
+  return state.attendance[key] || {};
+}
+function setAttendance(date, courseId, status) {
+  const key = toKey(date);
+  if (!state.attendance[key]) state.attendance[key] = {};
+  if (status === null) delete state.attendance[key][courseId];
+  else state.attendance[key][courseId] = status;
+  if (Object.keys(state.attendance[key]).length === 0) delete state.attendance[key];
+  save();
+}
+
+/* ========== 渲染：主页 ========== */
+function render() {
+  const app = document.getElementById('app');
+  app.dataset.tab = view.tab;
+  app.dataset.phase = state.phase;
+
+  document.getElementById('pageTitle').textContent =
+    view.tab === 'daily' ? '日常' : view.tab === 'study' ? '上学' : '健身';
+
+  renderHeaderRight();
+  renderTabs();
+  renderCalendar();
+  renderDetail();
+  renderSchedulePage();
+}
+
+function renderHeaderRight() {
+  const el = document.getElementById('headerRight');
+  if (view.tab === 'study') {
+    el.innerHTML = `<button class="header-btn" data-click="openSchedule">课表</button>`;
+  } else if (view.tab === 'fitness') {
+    el.innerHTML = `<div class="segmented">
+      <button class="${state.phase==='bulk'?'active':''}" data-click="setPhase" data-phase="bulk">增肌</button>
+      <button class="${state.phase==='cut'?'active':''}"  data-click="setPhase" data-phase="cut">减脂</button>
+    </div>`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+function renderTabs() {
+  const tabs = [
+    { id:'daily',   icon:'☀️', label:'日常' },
+    { id:'study',   icon:'📚', label:'上学' },
+    { id:'fitness', icon:'🏋️', label:'健身' }
+  ];
+  document.getElementById('tabbar').innerHTML = tabs.map(t => `
+    <button class="${view.tab === t.id ? 'active' : ''}" data-click="switchTab" data-tab="${t.id}">
+      <span class="icon">${t.icon}</span>
+      <span>${t.label}</span>
+    </button>
+  `).join('');
+}
+
+function renderCalendar() {
+  document.getElementById('monthTitle').textContent = monthTitle(view.month);
+  document.getElementById('weekdays').innerHTML =
+    ['一','二','三','四','五','六','日'].map(d => `<div>${d}</div>`).join('');
+
+  const month = view.month;
+  const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+  const offset = mondayIndex(firstOfMonth);
+  const gridStart = addDays(firstOfMonth, -offset);
+  const today = startOfDay(new Date());
+
+  let html = '';
+  for (let i = 0; i < 42; i++) {
+    const d = addDays(gridStart, i);
+    const isCurrentMonth = d.getMonth() === month.getMonth();
+    const isSelected = sameDay(d, view.selectedDay);
+    const isToday = sameDay(d, today);
+
+    let dot = false;
+    if (view.tab === 'fitness') dot = hasFitness(d);
+    else if (view.tab === 'study') dot = hasScheduleOn(d) || getEvents('study', d).length > 0;
+    else dot = getEvents('daily', d).length > 0;
+
+    const cls = ['day'];
+    if (!isCurrentMonth) cls.push('other-month');
+    if (isSelected) cls.push('selected');
+    if (isToday) cls.push('today');
+
+    html += `<div class="${cls.join(' ')}" data-click="openDetail" data-date="${toKey(d)}">
+      ${d.getDate()}
+      ${dot ? '<span class="dot"></span>' : ''}
+    </div>`;
+  }
+  document.getElementById('grid').innerHTML = html;
+}
+
+/* ========== 渲染：详情页 ========== */
+function renderDetail() {
+  const page = document.getElementById('detailPage');
+  if (!view.detailOpen) {
+    page.classList.remove('open');
+    page.innerHTML = '';
+    return;
+  }
+  page.classList.add('open');
+  if (view.tab === 'fitness') renderFitnessDetail(page);
+  else if (view.tab === 'study') renderStudyDetail(page);
+  else renderSimpleDetail(page);
+}
+
+function navBar(title, rightHtml) {
+  return `<div class="nav-bar">
+    <button class="nav-back" data-click="closeDetail">‹ 返回</button>
+    <div class="nav-title">${escapeHtml(title)}</div>
+    <div class="nav-right">${rightHtml || ''}</div>
+  </div>`;
+}
+
+function renderSimpleDetail(page) {
+  const day = view.selectedDay;
+  const events = getEvents(view.tab, day);
+
+  let html = navBar(dayTitle(day), `<button data-click="addEvent">＋</button>`);
+
+  if (events.length === 0) {
+    html += `<div class="inset-card"><div class="empty">这天还没有安排</div></div>`;
+  } else {
+    html += `<div class="section-header">事项</div>`;
+    html += `<div class="inset-card tight">`;
+    for (const e of events) {
+      html += `<div class="row" data-click="editEvent" data-id="${e.id}">
+        <div class="row-time">${e.time ? escapeHtml(e.time) : '—'}</div>
+        <div class="row-main">
+          <div class="row-title">${escapeHtml(e.title)}</div>
+          ${e.note ? `<div class="row-sub">${escapeHtml(e.note)}</div>` : ''}
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  page.innerHTML = html;
+}
+
+function renderStudyDetail(page) {
+  const day = view.selectedDay;
+  const courses = coursesForDay(day);
+  const attendance = getAttendance(day);
+  const events = getEvents('study', day);
+
+  let html = navBar(dayTitle(day), `<button data-click="addEvent">＋</button>`);
+
+  // 课表
+  if (courses.length > 0) {
+    html += `<div class="section-header">课程</div>`;
+    html += `<div class="inset-card tight">`;
+    for (const c of courses) {
+      const status = attendance[c.id] || null;
+      const markClass = status || 'none';
+      const markText = status ? ATTEND_MARK[status] : '';
+      html += `<div class="row" data-click="openAttendSheet" data-course-id="${c.id}">
+        <div class="row-main">
+          <div class="row-title">${escapeHtml(c.name)}</div>
+          <div class="row-sub">${escapeHtml(c.start)} - ${escapeHtml(c.end)}</div>
+        </div>
+        <div class="attend-mark ${markClass}">${markText}</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // 事项
+  if (events.length > 0) {
+    html += `<div class="section-header">事项</div>`;
+    html += `<div class="inset-card tight">`;
+    for (const e of events) {
+      html += `<div class="row" data-click="editEvent" data-id="${e.id}">
+        <div class="row-time">${e.time ? escapeHtml(e.time) : '—'}</div>
+        <div class="row-main">
+          <div class="row-title">${escapeHtml(e.title)}</div>
+          ${e.note ? `<div class="row-sub">${escapeHtml(e.note)}</div>` : ''}
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (courses.length === 0 && events.length === 0) {
+    html += `<div class="inset-card"><div class="empty">这天还没有安排<br><span style="font-size:13px;color:var(--text-2);">在主页右上角「课表」里添加每周固定的课程</span></div></div>`;
+  }
+
+  page.innerHTML = html;
+}
+
+function renderFitnessDetail(page) {
+  const day = view.selectedDay;
+  const data = state.fitness[toKey(day)] || emptyFitDay();
+
+  let html = navBar(dayTitle(day), '');
+
+  // 计划
+  html += `<div class="section-header">训练计划</div>`;
+  html += `<div class="inset-card tight" style="padding: 0;">`;
+  html += `<div class="plan-grid">`;
+  for (const p of PLAN_ORDER) {
+    html += `<button class="plan-btn ${data.plan === p ? 'active' : ''}" data-click="setPlan" data-plan="${p}">
+      <span class="emoji">${PLAN_EMOJI[p]}</span>
+      <span>${PLAN_LABELS[p]}</span>
+    </button>`;
+  }
+  html += `</div>`;
+  html += `<div class="check-row ${data.done ? 'checked' : ''}" data-click="toggleDone">
+    <div class="checkbox"></div>
+    <div class="check-label">今日训练完成</div>
+  </div>`;
+  if (state.phase === 'cut') {
+    html += `<div class="check-row ${data.fasting ? 'checked' : ''}" data-click="toggleFasting">
+      <div class="checkbox"></div>
+      <div class="check-label">空腹有氧</div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  // 饮食
+  html += `<div class="section-header">饮食记录 <button class="add" data-click="addMeal">＋</button></div>`;
+  if (!data.meals || data.meals.length === 0) {
+    html += `<div class="inset-card tight"><div class="empty">还没有记录</div></div>`;
+  } else {
+    html += `<div class="inset-card tight">`;
+    for (const m of data.meals) {
+      const cal = Math.round((+m.carbs||0)*4 + (+m.protein||0)*4 + (+m.fat||0)*9);
+      html += `<div class="meal-row" data-click="editMeal" data-id="${m.id}">
+        <div class="meal-name">${escapeHtml(m.name)}</div>
+        <div class="meal-macros">碳${(+m.carbs||0).toFixed(0)} 蛋${(+m.protein||0).toFixed(0)} 脂${(+m.fat||0).toFixed(0)}<br>${cal} kcal</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  const t = (data.meals || []).reduce((a, m) => ({
+    c: a.c + (+m.carbs || 0),
+    p: a.p + (+m.protein || 0),
+    f: a.f + (+m.fat || 0)
+  }), { c:0, p:0, f:0 });
+  const cal = Math.round(t.c*4 + t.p*4 + t.f*9);
+
+  html += `<div class="totals-card">
+    <div><div class="val">${t.c.toFixed(0)}</div><div class="lbl">碳水</div></div>
+    <div><div class="val">${t.p.toFixed(0)}</div><div class="lbl">蛋白</div></div>
+    <div><div class="val">${t.f.toFixed(0)}</div><div class="lbl">脂肪</div></div>
+    <div><div class="val">${cal}</div><div class="lbl">kcal</div></div>
+  </div>`;
+
+  page.innerHTML = html;
+}
+
+/* ========== 渲染：课表编辑页 ========== */
+function renderSchedulePage() {
+  const page = document.getElementById('schedulePage');
+  if (!view.scheduleOpen) {
+    page.classList.remove('open');
+    page.innerHTML = '';
+    return;
+  }
+  page.classList.add('open');
+
+  let html = `<div class="nav-bar">
+    <button class="nav-back" data-click="closeSchedule">‹ 返回</button>
+    <div class="nav-title">我的课表</div>
+    <div class="nav-right"></div>
+  </div>`;
+
+  for (let w = 1; w <= 7; w++) {
+    const list = (state.schedule[w] || []).slice().sort((a,b) => a.start.localeCompare(b.start));
+    html += `<div class="section-header">${WEEK_LABELS[w-1]} <button class="add" data-click="addCourse" data-weekday="${w}">＋</button></div>`;
+    if (list.length === 0) {
+      html += `<div class="inset-card tight"><div class="empty" style="padding:16px;font-size:14px;">暂无课程</div></div>`;
+    } else {
+      html += `<div class="inset-card tight">`;
+      for (const c of list) {
+        html += `<div class="row" data-click="editCourse" data-weekday="${w}" data-id="${c.id}">
+          <div class="row-time">${escapeHtml(c.start)}</div>
+          <div class="row-main">
+            <div class="row-title">${escapeHtml(c.name)}</div>
+            <div class="row-sub">结束 ${escapeHtml(c.end)}</div>
+          </div>
+          <div class="chevron">›</div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+  }
+
+  page.innerHTML = html;
+}
+
+/* ========== Modal ========== */
+function openModal(html) {
+  const m = document.getElementById('modal');
+  m.innerHTML = `<div class="modal">${html}</div>`;
+  m.style.display = 'flex';
+}
+function closeModal() {
+  const m = document.getElementById('modal');
+  m.style.display = 'none';
+  m.innerHTML = '';
+}
+
+function openEventModal(eventId) {
+  const isNew = !eventId;
+  let ev = { title:'', time:'', note:'', date: toKey(view.selectedDay) };
+  if (!isNew) {
+    const found = (state[view.tab] || []).find(e => e.id === eventId);
+    if (found) ev = Object.assign({}, found);
+  }
+
+  openModal(`
+    <h2>${isNew ? '新建事项' : '编辑事项'}</h2>
+    <div class="form-group">
+      <div class="form-row">
+        <label>标题</label>
+        <input id="f-title" type="text" value="${escapeHtml(ev.title)}" placeholder="要做什么" autocomplete="off">
+      </div>
+      <div class="form-row">
+        <label>时间</label>
+        <input id="f-time" type="time" value="${escapeHtml(ev.time || '')}">
+      </div>
+      <div class="form-row" style="align-items: flex-start;">
+        <label style="padding-top:8px;">备注</label>
+        <textarea id="f-note" placeholder="可选">${escapeHtml(ev.note || '')}</textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" data-click="closeModal">取消</button>
+      <button class="btn-save" data-click="saveEvent" data-id="${ev.id || ''}">保存</button>
+    </div>
+    ${!isNew ? `<button class="full-btn" data-click="deleteEvent" data-id="${ev.id}">删除事项</button>` : ''}
+  `);
+  setTimeout(() => { const i = document.getElementById('f-title'); if (i) i.focus(); }, 120);
+}
+
+function saveEvent(id) {
+  const title = document.getElementById('f-title').value.trim();
+  if (!title) { alert('请输入标题'); return; }
+  const time = document.getElementById('f-time').value || '';
+  const note = document.getElementById('f-note').value.trim();
+
+  if (id) updateEvent(view.tab, id, { title, time, note });
+  else addEvent(view.tab, { title, time, note, date: toKey(view.selectedDay) });
+
+  closeModal(); render();
+}
+
+function openMealModal(mealId) {
+  const day = getFitDay(view.selectedDay);
+  const isNew = !mealId;
+  let meal = { name:'', carbs:'', protein:'', fat:'' };
+  if (!isNew) {
+    const found = day.meals.find(m => m.id === mealId);
+    if (found) meal = Object.assign({}, found);
+  }
+
+  openModal(`
+    <h2>${isNew ? '添加食物' : '编辑食物'}</h2>
+    <div class="form-group">
+      <div class="form-row">
+        <label>名称</label>
+        <input id="f-name" type="text" value="${escapeHtml(meal.name)}" placeholder="例如 鸡胸肉 150g" autocomplete="off">
+      </div>
+      <div class="form-row row-3">
+        <div class="mini">
+          <label>碳水(g)</label>
+          <input id="f-carbs" type="number" inputmode="decimal" value="${meal.carbs}" placeholder="0">
+        </div>
+        <div class="mini">
+          <label>蛋白(g)</label>
+          <input id="f-protein" type="number" inputmode="decimal" value="${meal.protein}" placeholder="0">
+        </div>
+        <div class="mini">
+          <label>脂肪(g)</label>
+          <input id="f-fat" type="number" inputmode="decimal" value="${meal.fat}" placeholder="0">
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" data-click="closeModal">取消</button>
+      <button class="btn-save" data-click="saveMeal" data-id="${meal.id || ''}">保存</button>
+    </div>
+    ${!isNew ? `<button class="full-btn" data-click="deleteMeal" data-id="${meal.id}">删除记录</button>` : ''}
+  `);
+  setTimeout(() => { const i = document.getElementById('f-name'); if (i) i.focus(); }, 120);
+}
+
+function saveMeal(id) {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { alert('请输入食物名称'); return; }
+  const carbs = parseFloat(document.getElementById('f-carbs').value) || 0;
+  const protein = parseFloat(document.getElementById('f-protein').value) || 0;
+  const fat = parseFloat(document.getElementById('f-fat').value) || 0;
+
+  if (id) updateMeal(view.selectedDay, id, { name, carbs, protein, fat });
+  else addMeal(view.selectedDay, { name, carbs, protein, fat });
+
+  closeModal(); render();
+}
+
+function openCourseModal(weekday, courseId) {
+  const isNew = !courseId;
+  let c = { name:'', start:'08:00', end:'09:40' };
+  if (!isNew) {
+    const found = (state.schedule[weekday] || []).find(x => x.id === courseId);
+    if (found) c = Object.assign({}, found);
+  }
+
+  openModal(`
+    <h2>${isNew ? '添加课程' : '编辑课程'} · ${WEEK_LABELS[weekday-1]}</h2>
+    <div class="form-group">
+      <div class="form-row">
+        <label>课程名</label>
+        <input id="f-cname" type="text" value="${escapeHtml(c.name)}" placeholder="例如 高等数学" autocomplete="off">
+      </div>
+      <div class="form-row row-3" style="grid-template-columns: 1fr 1fr;">
+        <div class="mini">
+          <label>开始</label>
+          <input id="f-cstart" type="time" value="${escapeHtml(c.start)}">
+        </div>
+        <div class="mini">
+          <label>结束</label>
+          <input id="f-cend" type="time" value="${escapeHtml(c.end)}">
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" data-click="closeModal">取消</button>
+      <button class="btn-save" data-click="saveCourse" data-weekday="${weekday}" data-id="${c.id || ''}">保存</button>
+    </div>
+    ${!isNew ? `<button class="full-btn" data-click="deleteCourse" data-weekday="${weekday}" data-id="${c.id}">删除课程</button>` : ''}
+  `);
+  setTimeout(() => { const i = document.getElementById('f-cname'); if (i) i.focus(); }, 120);
+}
+
+function saveCourse(weekday, id) {
+  const name = document.getElementById('f-cname').value.trim();
+  if (!name) { alert('请输入课程名'); return; }
+  const start = document.getElementById('f-cstart').value || '08:00';
+  const end = document.getElementById('f-cend').value || '09:40';
+
+  if (id) updateCourse(weekday, id, { name, start, end });
+  else addCourse(weekday, { name, start, end });
+
+  closeModal(); render();
+}
+
+/* ========== Action Sheet（出勤状态） ========== */
+let currentAttend = { courseId: null };
+
+function openAttendSheet(courseId) {
+  const day = view.selectedDay;
+  const att = getAttendance(day);
+  const cur = att[courseId] || null;
+
+  // 找课程名
+  const courses = coursesForDay(day);
+  const course = courses.find(c => c.id === courseId);
+  const courseName = course ? course.name : '';
+
+  currentAttend.courseId = courseId;
+
+  const sheet = document.getElementById('sheet');
+  sheet.innerHTML = `<div class="sheet-panel">
+    <div class="sheet-group">
+      <div class="sheet-title">${escapeHtml(courseName)}</div>
+      <button class="sheet-btn ${cur==='present'?'bold':''}" data-click="setAttend" data-status="present">出席</button>
+      <button class="sheet-btn ${cur==='signed'?'bold':''}"  data-click="setAttend" data-status="signed">签到</button>
+      <button class="sheet-btn ${cur==='absent'?'bold':''}"  data-click="setAttend" data-status="absent">缺席</button>
+      ${cur ? `<button class="sheet-btn destructive" data-click="setAttend" data-status="__clear">清除标记</button>` : ''}
+    </div>
+    <div class="sheet-group">
+      <button class="sheet-btn bold" data-click="closeSheet">取消</button>
+    </div>
+  </div>`;
+  sheet.style.display = 'flex';
+}
+function closeSheet() {
+  const sheet = document.getElementById('sheet');
+  sheet.style.display = 'none';
+  sheet.innerHTML = '';
+  currentAttend.courseId = null;
+}
+
+/* ========== 全局事件委托 ========== */
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'modal') { closeModal(); return; }
+  if (e.target.id === 'sheet') { closeSheet(); return; }
+
+  const el = e.target.closest('[data-click]');
+  if (!el) return;
+  const action = el.dataset.click;
+
+  switch (action) {
+    case 'openDetail':
+      view.selectedDay = fromKey(el.dataset.date);
+      view.detailOpen = true;
+      render(); break;
+    case 'closeDetail':
+      view.detailOpen = false;
+      render(); break;
+    case 'prevMonth':
+      view.month = new Date(view.month.getFullYear(), view.month.getMonth() - 1, 1);
+      render(); break;
+    case 'nextMonth':
+      view.month = new Date(view.month.getFullYear(), view.month.getMonth() + 1, 1);
+      render(); break;
+    case 'switchTab':
+      view.tab = el.dataset.tab;
+      view.detailOpen = false;
+      view.scheduleOpen = false;
+      render(); break;
+    case 'addEvent':
+      openEventModal(); break;
+    case 'editEvent':
+      openEventModal(el.dataset.id); break;
+    case 'saveEvent':
+      saveEvent(el.dataset.id || null); break;
+    case 'deleteEvent':
+      if (confirm('确定删除这个事项？')) {
+        deleteEvent(view.tab, el.dataset.id);
+        closeModal(); render();
+      }
+      break;
+    case 'setPhase':
+      state.phase = el.dataset.phase;
+      save(); render(); break;
+    case 'setPlan':
+      setFitnessPlan(view.selectedDay, el.dataset.plan);
+      render(); break;
+    case 'toggleDone': {
+      const key = toKey(view.selectedDay);
+      const cur = (state.fitness[key] && state.fitness[key].done) || false;
+      setFitnessDone(view.selectedDay, !cur);
+      render(); break;
+    }
+    case 'toggleFasting': {
+      const key = toKey(view.selectedDay);
+      const cur = (state.fitness[key] && state.fitness[key].fasting) || false;
+      setFitnessFasting(view.selectedDay, !cur);
+      render(); break;
+    }
+    case 'addMeal':
+      openMealModal(); break;
+    case 'editMeal':
+      openMealModal(el.dataset.id); break;
+    case 'saveMeal':
+      saveMeal(el.dataset.id || null); break;
+    case 'deleteMeal':
+      if (confirm('确定删除这条记录？')) {
+        deleteMeal(view.selectedDay, el.dataset.id);
+        closeModal(); render();
+      }
+      break;
+    case 'openSchedule':
+      view.scheduleOpen = true;
+      render(); break;
+    case 'closeSchedule':
+      view.scheduleOpen = false;
+      render(); break;
+    case 'addCourse':
+      openCourseModal(parseInt(el.dataset.weekday, 10)); break;
+    case 'editCourse':
+      openCourseModal(parseInt(el.dataset.weekday, 10), el.dataset.id); break;
+    case 'saveCourse':
+      saveCourse(parseInt(el.dataset.weekday, 10), el.dataset.id || null); break;
+    case 'deleteCourse':
+      if (confirm('确定删除这门课？')) {
+        deleteCourse(parseInt(el.dataset.weekday, 10), el.dataset.id);
+        closeModal(); render();
+      }
+      break;
+    case 'openAttendSheet':
+      openAttendSheet(el.dataset.courseId); break;
+    case 'setAttend': {
+      const status = el.dataset.status;
+      setAttendance(view.selectedDay, currentAttend.courseId, status === '__clear' ? null : status);
+      closeSheet(); render(); break;
+    }
+    case 'closeSheet':
+      closeSheet(); break;
+    case 'closeModal':
+      closeModal(); break;
+  }
+});
+
+/* ========== 启动 ========== */
+function init() {
+  load();
+  const today = startOfDay(new Date());
+  view.month = new Date(today.getFullYear(), today.getMonth(), 1);
+  view.selectedDay = today;
+  render();
+}
+init();
+</script>
+</body>
+</html>
